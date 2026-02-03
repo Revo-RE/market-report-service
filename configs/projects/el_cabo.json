@@ -1,0 +1,78 @@
+{
+  "project_name": "El Cabo",
+  "google_sheets": {
+    "spreadsheet_id": "EL_CABO_SHEET_ID",
+    "tabs": ["Inventory", "Pricing", "Absorption"],
+    "local_csv_dir": "tests/fixtures/google_sheets"
+  },
+  "tables": [
+    {
+      "name": "inventory",
+      "source_tab": "Inventory",
+      "column_mappings": {
+        "unit_id": "Unit ID",
+        "status": "Status",
+        "bedrooms": "Bedrooms",
+        "price": "List Price"
+      },
+      "required_columns": ["unit_id", "status"],
+      "required_fields": ["unit_id", "status"]
+    },
+    {
+      "name": "pricing",
+      "source_tab": "Pricing",
+      "column_mappings": {
+        "unit_id": "Unit ID",
+        "price": "Price",
+        "price_sqft": "Price / SF"
+      },
+      "required_columns": ["unit_id", "price"],
+      "required_fields": ["unit_id", "price"]
+    },
+    {
+      "name": "absorption",
+      "source_tab": "Absorption",
+      "column_mappings": {
+        "month": "Month",
+        "net_absorption": "Net Absorption"
+      },
+      "required_columns": ["month", "net_absorption"],
+      "required_fields": ["month", "net_absorption"]
+    }
+  ],
+  "charts": [
+    {
+      "name": "inventory_status",
+      "table": "inventory",
+      "type": "bar",
+      "x": "status",
+      "y": "unit_id",
+      "aggregate": "count",
+      "output": "inventory_status.png"
+    },
+    {
+      "name": "absorption_trend",
+      "table": "absorption",
+      "type": "line",
+      "x": "month",
+      "y": "net_absorption",
+      "aggregate": "sum",
+      "output": "absorption_trend.png"
+    }
+  ],
+  "ppt": {
+    "template": "templates/mvp_template.pptx",
+    "slides": [
+      {
+        "title": "Inventory Overview",
+        "chart": "inventory_status",
+        "layout": "title_and_chart"
+      },
+      {
+        "title": "Absorption Trend",
+        "chart": "absorption_trend",
+        "layout": "title_and_chart"
+      }
+    ]
+  }
+}

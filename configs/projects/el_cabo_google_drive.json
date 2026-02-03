@@ -1,0 +1,75 @@
+{
+  "project_name": "El Cabo",
+  "google_drive_folder": {
+    "folder_url": "https://drive.google.com/drive/u/1/folders/1Npx2u4QrHciP50lBe_tige1YRZhw_jNW",
+    "sheet_name": "Sheet1",
+    "table_key": "raw"
+  },
+  "reference": {
+    "path": "files/elcabo_consolidado/Los Cabos_Insumosv01.xlsx",
+    "sheet": "Histórico_Mercado",
+    "table": "historico_mercado"
+  },
+  "tables": [
+    {
+      "name": "historico_mercado",
+      "source_tab": "raw",
+      "column_mappings": {
+        "Proyecto": "Proyecto",
+        "Desarrollador": "Desarrollador",
+        "Último Trimestre": "Último Trimestre",
+        "Absorción por Proyecto": "Absorción por Proyecto",
+        "Meses de Inventario": "Meses de Inventario",
+        "Meses en el Mercado": "Meses en el Mercado",
+        "Unidades Totales": "Unidades Totales",
+        "Unidades Inventario": "Unidades Inventario",
+        "Precio Promedio Inv.": "Precio Promedio Inv.",
+        "$M2 Promedio Inv": "$M2 Promedio Inv",
+        "M2 Promedio Inv": "M2 Promedio Inv",
+        "Estatus": "Estatus"
+      },
+      "required_columns": [
+        "Proyecto",
+        "Desarrollador",
+        "Último Trimestre",
+        "Absorción por Proyecto",
+        "Meses de Inventario",
+        "Meses en el Mercado",
+        "Unidades Totales",
+        "Unidades Inventario",
+        "Precio Promedio Inv.",
+        "$M2 Promedio Inv",
+        "M2 Promedio Inv",
+        "Estatus"
+      ],
+      "required_fields": ["Proyecto", "Último Trimestre"]
+    },
+    {
+      "name": "historico_proy_nuevos",
+      "source_tab": "raw",
+      "derived_from": "historico_mercado",
+      "group_by": ["Proyecto"],
+      "order_by": "Último Trimestre",
+      "order_by_kind": "quarter",
+      "column_mappings": {
+        "Proyecto": "Proyecto",
+        "Desarrollador": "Desarrollador",
+        "Último Trimestre": "Último Trimestre",
+        "Absorción por Proyecto": "Absorción por Proyecto",
+        "Meses de Inventario": "Meses de Inventario",
+        "Meses en el Mercado": "Meses en el Mercado",
+        "Unidades Totales": "Unidades Totales",
+        "Unidades Inventario": "Unidades Inventario",
+        "Precio Promedio Inv.": "Precio Promedio Inv.",
+        "$M2 Promedio Inv": "$M2 Promedio Inv",
+        "M2 Promedio Inv": "M2 Promedio Inv",
+        "Estatus": "Estatus"
+      }
+    }
+  ],
+  "charts": [],
+  "ppt": {
+    "template": "templates/mvp_template.pptx",
+    "slides": []
+  }
+}

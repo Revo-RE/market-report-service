@@ -1,0 +1,69 @@
+{
+  "project_name": "{PROYECTO}",
+  "google_drive_folder": {
+    "folder_url": "https://drive.google.com/drive/folders/1e-8X3B1pIQ023Zaie5wNzqSKSXr45o9l?usp=sharing",
+    "sheet_name": null,
+    "table_key": "raw",
+    "subfolder_name": "Historicos_{PROYECTO}"
+  },
+  "output": {
+    "local_dir": "outputs",
+    "drive_folder_url": "https://drive.google.com/drive/folders/1IVXwqL8Pv1dCI4NZ1YcZCG5o35tWh_Sl",
+    "filename": "{PROYECTO}_Insumos_Consolidado.xlsx",
+    "drive_convert": true,
+    "keep_local": false
+  },
+  "tables": [
+    {
+      "name": "raw_clean",
+      "source_tab": "raw",
+      "column_mappings": {},
+      "retain_all_columns": true,
+      "required_columns": [],
+      "required_fields": []
+    },
+    {
+      "name": "historico_mercado",
+      "source_tab": "raw",
+      "column_mappings": {},
+      "retain_all_columns": true,
+      "required_columns": [],
+      "required_fields": ["Proyecto", "Último Trimestre"],
+      "key_columns": ["Proyecto", "Último Trimestre"],
+      "quarter_column": "Último Trimestre"
+    },
+    {
+      "name": "historico_proy_nuevos",
+      "source_tab": "raw",
+      "derived_from": "historico_mercado",
+      "group_by": ["Proyecto"],
+      "order_by": "Último Trimestre",
+      "order_by_kind": "quarter",
+      "column_mappings": {
+        "Proyecto": "Proyecto",
+        "Desarrollador": "Desarrollador",
+        "Último Trimestre": "Último Trimestre",
+        "Absorción por Proyecto": "Absorción por Proyecto",
+        "Meses de Inventario": "Meses de Inventario",
+        "Meses en el Mercado": "Meses en el Mercado",
+        "Unidades Totales": "Unidades Totales",
+        "Unidades Inventario": "Unidades Inventario",
+        "Precio Promedio Inv.": "Precio Promedio Inv.",
+        "$M2 Promedio Inv": "$M2 Promedio Inv",
+        "M2 Promedio Inv": "M2 Promedio Inv",
+        "Estatus": "Estatus"
+      },
+      "key_columns": ["Proyecto"],
+      "quarter_column": "Último Trimestre"
+    }
+  ],
+  "charts": [],
+  "raw": {
+    "golden_hist_path": "files/guadalajara_consolidado/Guadalajara_Insumos_Consolidado.xlsx",
+    "golden_hist_sheet": "Histórico_Mercado"
+  },
+  "ppt": {
+    "template": "templates/mvp_template.pptx",
+    "slides": []
+  }
+}

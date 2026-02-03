@@ -1,0 +1,53 @@
+{
+  "project_name": "Default",
+  "google_sheets": {
+    "spreadsheet_id": "REPLACE_ME",
+    "tabs": ["Inventory", "Pricing"],
+    "local_csv_dir": "tests/fixtures/google_sheets"
+  },
+  "tables": [
+    {
+      "name": "inventory",
+      "source_tab": "Inventory",
+      "column_mappings": {
+        "unit_id": "Unit ID",
+        "status": "Status",
+        "price": "List Price"
+      },
+      "required_columns": ["unit_id", "status"],
+      "required_fields": ["unit_id", "status"]
+    },
+    {
+      "name": "pricing",
+      "source_tab": "Pricing",
+      "column_mappings": {
+        "unit_id": "Unit ID",
+        "price": "Price",
+        "price_sqft": "Price / SF"
+      },
+      "required_columns": ["unit_id", "price"],
+      "required_fields": ["unit_id", "price"]
+    }
+  ],
+  "charts": [
+    {
+      "name": "inventory_status",
+      "table": "inventory",
+      "type": "bar",
+      "x": "status",
+      "y": "unit_id",
+      "aggregate": "count",
+      "output": "inventory_status.png"
+    }
+  ],
+  "ppt": {
+    "template": "templates/mvp_template.pptx",
+    "slides": [
+      {
+        "title": "Inventory Overview",
+        "chart": "inventory_status",
+        "layout": "title_and_chart"
+      }
+    ]
+  }
+}
