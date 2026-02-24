@@ -79,6 +79,71 @@ class QualityService:
         if errors:
             raise QCError("; ".join(errors))
 
+    def build_report(self, tables: Dict[str, pd.DataFrame]) -> Dict[str, object]:
+        """Build a lightweight data quality report without failing the pipeline."""
+        report: Dict[str, object] = {"tables": {}}
+        for name, table in tables.items():
+            df = table.copy() if isinstance(table, pd.DataFrame) else pd.DataFrame()
+            table_report = {
+                "rows": int(len(df)),
+                "cols": int(len(df.columns)),
+                "nulls": {},
+                "duplicate_keys": 0,
+                "negatives": {},
+                "numeric_stats": {},
+            }
+
+            if not df.empty:
+                table_report["nulls"] = {col: int(df[col].isna().sum()) for col in df.columns}
+
+                key_map = {
+                    "Ids": ["Proyecto"],
+                    "Historico": ["Trimestre"],
+                    "Data": ["Proyecto"],
+                }
+                key_cols = key_map.get(name, [])
+                if key_cols and all(col in df.columns for col in key_cols):
+                    table_report["duplicate_keys"] = int(df.duplicated(subset=key_cols).sum())
+
+                numeric_cols = []
+                for col in df.columns:
+                    series = pd.to_numeric(df[col], errors="coerce")
+                    if series.notna().sum() > 0:
+                        numeric_cols.append(col)
+                        negatives = int((series < 0).sum())
+                        if negatives:
+                            table_report["negatives"][col] = negatives
+                        table_report["numeric_stats"][col] = {
+                            "min": float(series.min()),
+                            "max": float(series.max()),
+                            "mean": float(series.mean()),
+                            "p50": float(series.quantile(0.5)),
+                            "p95": float(series.quantile(0.95)),
+                            "p99": float(series.quantile(0.99)),
+                        }
+
+            report["tables"][name] = table_report
+        return report
+
+    def build_summary(self, report: Dict[str, object]) -> pd.DataFrame:
+        """Create a compact CSV-friendly summary from the report."""
+        rows = []
+        tables = report.get("tables", {})
+        for name, table in tables.items():
+            null_total = sum(table.get("nulls", {}).values())
+            negatives_total = sum(table.get("negatives", {}).values())
+            rows.append(
+                {
+                    "table": name,
+                    "rows": table.get("rows", 0),
+                    "cols": table.get("cols", 0),
+                    "null_total": null_total,
+                    "duplicate_keys": table.get("duplicate_keys", 0),
+                    "negative_total": negatives_total,
+                }
+            )
+        return pd.DataFrame(rows)
+
     def _validate_against_golden_metadata(self, table: pd.DataFrame, table_name: str) -> List[str]:
         """Validate table structure against golden metadata."""
         errors: List[str] = []
@@ -197,35 +262,6 @@ class QualityService:
         if invalid_count > 0:
             errors.append(f"Table '{config.name}' has {invalid_count} invalid quarter values in '{quarter_col}'")
         return errors
-
-    def compare_to_reference(
-        self,
-        table: pd.DataFrame,
-        reference_path: str,
-        sheet_name: str,
-        key_columns: List[str] | None = None,
-        filter_quarters: List[str] | None = None,
-        rtol: float = 1e-6,
-        atol: float = 1e-3,
-        column_tolerances: Dict[str, Dict[str, float]] | None = None,
-        report_path: str | None = None,
-    ) -> None:
-        from market_report.application.services.compare import ComparisonService
-
-        comparator = ComparisonService()
-        result = comparator.compare_single(
-            table=table,
-            reference_path=reference_path,
-            sheet_name=sheet_name,
-            key_columns=key_columns or [],
-            filter_quarters=filter_quarters or [],
-            rtol=rtol,
-            atol=atol,
-            column_tolerances=column_tolerances or {},
-            report_path=report_path,
-        )
-        if result["status"] != "ok":
-            raise QCError(f"Reference comparison failed for '{sheet_name}': {result['status']}")
 
     @staticmethod
     def _normalize_value(value: object) -> str:

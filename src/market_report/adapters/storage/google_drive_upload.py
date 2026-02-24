@@ -146,24 +146,31 @@ class GoogleDriveUploader:
             raise FileNotFoundError(f"File not found: {file_path}")
 
         filename = filename or file_path.name
+        sheet_name = filename
+        if convert_to_sheets and filename.lower().endswith(".xlsx"):
+            sheet_name = filename[:-5]
 
         self._logger.info("Uploading %s to Google Drive folder %s (folder_id: %s)", file_path, folder_url, folder_id)
 
         # Check if file already exists and delete it first
         try:
-            existing_files = (
-                drive_service.files()
-                .list(
-                    q=f"name='{filename}' and '{folder_id}' in parents and trashed=false",
-                    fields="files(id, name)",
-                    supportsAllDrives=True,
-                    includeItemsFromAllDrives=True,
+            names_to_check = {filename}
+            if convert_to_sheets:
+                names_to_check.add(sheet_name)
+            for name in names_to_check:
+                existing_files = (
+                    drive_service.files()
+                    .list(
+                        q=f"name='{name}' and '{folder_id}' in parents and trashed=false",
+                        fields="files(id, name)",
+                        supportsAllDrives=True,
+                        includeItemsFromAllDrives=True,
+                    )
+                    .execute()
                 )
-                .execute()
-            )
-            for existing_file in existing_files.get("files", []):
-                self._logger.info("Deleting existing file: %s (ID: %s)", existing_file["name"], existing_file["id"])
-                drive_service.files().delete(fileId=existing_file["id"], supportsAllDrives=True).execute()
+                for existing_file in existing_files.get("files", []):
+                    self._logger.info("Deleting existing file: %s (ID: %s)", existing_file["name"], existing_file["id"])
+                    drive_service.files().delete(fileId=existing_file["id"], supportsAllDrives=True).execute()
         except Exception as e:
             self._logger.warning("Could not check for existing files: %s", e)
 
@@ -198,7 +205,7 @@ class GoogleDriveUploader:
                     .copy(
                         fileId=file_id,
                         body={
-                            "name": filename,
+                            "name": sheet_name,
                             "parents": [folder_id],
                             "mimeType": "application/vnd.google-apps.spreadsheet",
                         },

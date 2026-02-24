@@ -1,14 +1,14 @@
 {
   "project_name": "{PROYECTO}",
   "google_drive_folder": {
-    "folder_url": "https://drive.google.com/drive/folders/1e-8X3B1pIQ023Zaie5wNzqSKSXr45o9l?usp=sharing",
+    "folder_url": "https://drive.google.com/drive/folders/1IedI_k2E-dT0Zdyex1oMwCtjpmKwSGz_?usp=sharing",
     "sheet_name": null,
     "table_key": "raw",
     "subfolder_name": "Historicos_{PROYECTO}"
   },
   "output": {
     "local_dir": "outputs",
-    "drive_folder_url": "https://drive.google.com/drive/folders/1IVXwqL8Pv1dCI4NZ1YcZCG5o35tWh_Sl",
+    "drive_folder_url": "https://drive.google.com/drive/folders/1amU2MUnqNjgiaUPhQISgfgrVKKqbQg33?usp=sharing",
     "filename": "{PROYECTO}_Insumos_Consolidado.xlsx",
     "drive_convert": true,
     "keep_local": false
@@ -60,7 +60,13 @@
   "charts": [],
   "raw": {
     "golden_hist_path": "files/guadalajara_consolidado/Guadalajara_Insumos_Consolidado.xlsx",
-    "golden_hist_sheet": "Histórico_Mercado"
+    "golden_hist_sheet": "Histórico_Mercado",
+    "minimal_output": true,
+    "minimal_source_path": "files/guadalajara_consolidado/Guadalajara_Insumos_Consolidado.xlsx",
+    "minimal_layout_path": "files/Prueba_AnalisisMercado.xlsx",
+    "minimal_start_quarter": "2021 - Q1",
+    "minimal_display_start_quarter": "2021 - Q3",
+    "minimal_filter_path": "files/Prueba_AnalisisMercado.xlsx"
   },
   "ppt": {
     "template": "templates/mvp_template.pptx",

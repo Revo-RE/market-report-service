@@ -68,7 +68,7 @@ class GoogleDriveFolderDataSource(DataSource):
         # Get all files in the folder
         folder_id = self._extract_folder_id(self._config.folder_url)
         if self._config.subfolder_name:
-            folder_id = self._find_subfolder_id(drive_service, folder_id, self._config.subfolder_name)
+            folder_id = self._resolve_subfolder_path(drive_service, folder_id, self._config.subfolder_name)
             self._resolved_folder_url = f"https://drive.google.com/drive/folders/{folder_id}"
         else:
             self._resolved_folder_url = self._config.folder_url
@@ -165,6 +165,9 @@ class GoogleDriveFolderDataSource(DataSource):
                     q=query,
                     fields="files(id, name, mimeType)",
                     pageSize=1000,
+                    supportsAllDrives=True,
+                    includeItemsFromAllDrives=True,
+                    corpora="allDrives",
                 )
                 .execute()
             )
@@ -193,6 +196,9 @@ class GoogleDriveFolderDataSource(DataSource):
                     q=query,
                     fields="files(id, name)",
                     pageSize=1000,
+                    supportsAllDrives=True,
+                    includeItemsFromAllDrives=True,
+                    corpora="allDrives",
                 )
                 .execute()
             )
@@ -207,3 +213,10 @@ class GoogleDriveFolderDataSource(DataSource):
             if isinstance(e, FileNotFoundError):
                 raise
             raise RuntimeError(f"Error locating subfolder '{subfolder_name}': {e}")
+
+    def _resolve_subfolder_path(self, drive_service, parent_folder_id: str, subfolder_path: str) -> str:
+        """Resolve nested subfolder paths like 'A/B/C'."""
+        current = parent_folder_id
+        for part in [p for p in subfolder_path.split("/") if p]:
+            current = self._find_subfolder_id(drive_service, current, part)
+        return current

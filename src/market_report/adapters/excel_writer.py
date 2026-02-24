@@ -50,7 +50,7 @@ class ExcelWriter:
                     # Write empty DataFrame to maintain structure
                     pd.DataFrame().to_excel(writer, sheet_name=tab_name, index=False)
                 else:
-                    df.to_excel(writer, sheet_name=tab_name, index=False, header=False)
+                    df.to_excel(writer, sheet_name=tab_name, index=False, header=True)
                     self._logger.debug("Wrote tab '%s' with %d rows x %d cols", tab_name, len(df), len(df.columns))
 
         # Apply number formats for specific tabs after writing
