@@ -188,13 +188,14 @@ class GoogleDriveFolderDataSource(DataSource):
         try:
             query = (
                 f"'{parent_folder_id}' in parents and trashed=false "
-                "and mimeType='application/vnd.google-apps.folder'"
+                "and (mimeType='application/vnd.google-apps.folder' "
+                "or mimeType='application/vnd.google-apps.shortcut')"
             )
             results = (
                 drive_service.files()
                 .list(
                     q=query,
-                    fields="files(id, name)",
+                    fields="files(id, name, mimeType, shortcutDetails)",
                     pageSize=1000,
                     supportsAllDrives=True,
                     includeItemsFromAllDrives=True,
@@ -205,10 +206,22 @@ class GoogleDriveFolderDataSource(DataSource):
             folders = results.get("files", [])
             matches = [f for f in folders if f.get("name") == subfolder_name]
             if not matches:
+                target = subfolder_name.replace("_", "").replace(" ", "").lower()
+                matches = [
+                    f
+                    for f in folders
+                    if f.get("name") and f.get("name").replace("_", "").replace(" ", "").lower() == target
+                ]
+            if not matches:
                 raise FileNotFoundError(
                     f"Subfolder not found: '{subfolder_name}' in parent folder {self._config.folder_url}"
                 )
-            return matches[0]["id"]
+            match = matches[0]
+            if match.get("mimeType") == "application/vnd.google-apps.shortcut":
+                target_id = (match.get("shortcutDetails") or {}).get("targetId")
+                if target_id:
+                    return target_id
+            return match["id"]
         except Exception as e:
             if isinstance(e, FileNotFoundError):
                 raise

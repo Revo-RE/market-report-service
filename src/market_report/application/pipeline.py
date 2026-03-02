@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 import shutil
 from typing import Dict, Optional
+import tempfile
 
 import json
 import pandas as pd
@@ -73,7 +74,14 @@ class MarketReportPipeline:
     def run(self, config_path: str, default_config_path: Optional[str] = None, run_id: Optional[str] = None) -> PipelineResult:
         config = load_project_config(config_path, default_config_path)
         run_id = run_id or datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-        run_dir = self._storage.prepare_run_dir(run_id)
+        if (
+            getattr(config, "output", None)
+            and config.output
+            and getattr(config.output, "keep_local", True) is False
+        ):
+            run_dir = Path(tempfile.mkdtemp(prefix="market_report_run_"))
+        else:
+            run_dir = self._storage.prepare_run_dir(run_id)
         charts_dir = run_dir / "charts"
 
         # Minimal 3-sheet consolidated output (layout-driven)
@@ -119,7 +127,7 @@ class MarketReportPipeline:
                 self._excel_writer.write_workbook(
                     minimal_tabs,
                     consolidated_path,
-                    tab_order=["Ids", "Historico", "Data", "Filtro_Proyectos"],
+                    tab_order=["Ids", "Historico", "Data", "Tipologias"],
                 )
 
                 target_drive_folder = config.output.drive_folder_url

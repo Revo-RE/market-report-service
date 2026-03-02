@@ -5,6 +5,7 @@ import argparse
 import json
 import os
 from datetime import datetime
+import tempfile
 from pathlib import Path
 
 import sys
@@ -48,8 +49,7 @@ def _resolve_config(base_config_path: str, project: str | None) -> Path:
         data["output"] = output_cfg
 
     run_id = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-    resolved_dir = Path("outputs") / "_resolved_configs"
-    resolved_dir.mkdir(parents=True, exist_ok=True)
+    resolved_dir = Path(tempfile.mkdtemp(prefix="market_report_configs_"))
     resolved_path = resolved_dir / f"config_{run_id}.json"
     resolved_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     return resolved_path

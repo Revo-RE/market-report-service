@@ -26,8 +26,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--prefix",
-        default="Historicos_",
-        help="Folder prefix to detect city folders (default: Historicos_)",
+        default="Historicos ",
+        help="Folder prefix to detect city folders (default: 'Historicos ')",
     )
     parser.add_argument(
         "--root-subfolder",
@@ -68,13 +68,14 @@ def _get_drive_service() -> object:
 def _list_subfolders(drive_service, parent_folder_id: str) -> list[dict[str, str]]:
     query = (
         f"'{parent_folder_id}' in parents and trashed=false "
-        "and mimeType='application/vnd.google-apps.folder'"
+        "and (mimeType='application/vnd.google-apps.folder' "
+        "or mimeType='application/vnd.google-apps.shortcut')"
     )
     results = (
         drive_service.files()
             .list(
                 q=query,
-                fields="files(id, name)",
+                fields="files(id, name, mimeType, shortcutDetails)",
                 pageSize=1000,
                 supportsAllDrives=True,
                 includeItemsFromAllDrives=True,
@@ -82,7 +83,15 @@ def _list_subfolders(drive_service, parent_folder_id: str) -> list[dict[str, str
             )
             .execute()
     )
-    return results.get("files", [])
+    folders = []
+    for item in results.get("files", []):
+        if item.get("mimeType") == "application/vnd.google-apps.shortcut":
+            target_id = (item.get("shortcutDetails") or {}).get("targetId")
+            if target_id:
+                folders.append({"id": target_id, "name": item.get("name", "")})
+        else:
+            folders.append(item)
+    return folders
 
 def _list_data_files(drive_service, folder_id: str) -> list[dict[str, str]]:
     query = f"'{folder_id}' in parents and trashed=false"
