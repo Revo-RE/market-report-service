@@ -9,7 +9,7 @@
   "output": {
     "local_dir": "outputs",
     "drive_folder_url": "https://drive.google.com/drive/folders/1amU2MUnqNjgiaUPhQISgfgrVKKqbQg33?usp=sharing",
-    "filename": "{PROYECTO}_Insumos_Consolidado.xlsx",
+    "filename": "{PROYECTO}_Consolidado.xlsx",
     "drive_convert": true,
     "keep_local": false
   },
@@ -57,19 +57,89 @@
       "quarter_column": "Último Trimestre"
     }
   ],
-  "charts": [],
   "raw": {
-    "golden_hist_path": "files/guadalajara_consolidado/Guadalajara_Insumos_Consolidado.xlsx",
-    "golden_hist_sheet": "Histórico_Mercado",
     "minimal_output": true,
-    "minimal_source_path": "files/guadalajara_consolidado/Guadalajara_Insumos_Consolidado.xlsx",
-    "minimal_layout_path": "files/Prueba_AnalisisMercado.xlsx",
+    "minimal_source_path": "drive",
     "minimal_start_quarter": "2021 - Q3",
     "minimal_display_start_quarter": "2021 - Q4",
-    "minimal_filter_path": "https://docs.google.com/spreadsheets/d/1mv1x87jCV4q3ZOj59Mt5pZ_QagzrBxYV2M4megr0Apo/edit?gid=1762762293#gid=1762762293"
-  },
-  "ppt": {
-    "template": "templates/mvp_template.pptx",
-    "slides": []
+    "minimal_filter_path": "https://docs.google.com/spreadsheets/d/1mv1x87jCV4q3ZOj59Mt5pZ_QagzrBxYV2M4megr0Apo/edit?gid=1762762293#gid=1762762293",
+    "minimal_layout": {
+      "Ids": [
+        "Proyecto",
+        "Desarrollador",
+        "ID"
+      ],
+      "Historico": [
+        "Trimestre",
+        "Proyectos_A",
+        "Proyectos_N",
+        "Stock_Inicial_A",
+        "Stock_Inicial_N",
+        "Inventario",
+        "Ticket",
+        "$xm2",
+        "Superficie",
+        "Ventas",
+        "Absorcion",
+        "Meses_Inventario"
+      ],
+      "Data": [
+        "Proyecto",
+        "Desarrollador",
+        "ID",
+        "Stock_Inicial",
+        "Ventas",
+        "Absorcion",
+        "Absorcion_H",
+        "Meses_Inventario",
+        "Meses_Mercado",
+        "Inventario",
+        "Ticket",
+        "$xm2",
+        "Superficie",
+        "Segmento",
+        "Estatus",
+        "Latitud",
+        "Longitud",
+        "Fecha_Inicio",
+        "Ultimo_Levantamiento",
+        "Alberca",
+        "Asadores",
+        "Bar",
+        "Canchas Deportivas",
+        "Casa Club",
+        "Fogatero",
+        "Gimnasio",
+        "Jacuzzi",
+        "Ludoteca",
+        "Pet Zone",
+        "Pista de Jogging ",
+        "Sala de Cine",
+        "Salón de Usos Multiples",
+        "Salón de Yoga",
+        "Sauna",
+        "Spa",
+        "Terraza"
+      ],
+      "Tipologias": [
+        "Codigo COL",
+        "ID",
+        "Proyecto",
+        "Desarrollador",
+        "Tipo de Modelo",
+        "Nombre Modelo",
+        "Ticket",
+        "$xm2",
+        "Superficie",
+        "Dormitorios",
+        "Bathroom",
+        "Cajones",
+        "Stock_Inicial",
+        "Inventario",
+        "Meses_Mercado",
+        "Ventas",
+        "Absorcion"
+      ]
+    }
   }
 }

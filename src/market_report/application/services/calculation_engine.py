@@ -85,9 +85,9 @@ class CalculationEngineService:
         "Dormitorios",
         "Bathroom",
         "Cajones",
-        "Stock Inicial",
+        "Stock_Inicial",
         "Inventario",
-        "Meses en Mercado",
+        "Meses_Mercado",
         "Ventas",
         "Absorcion",
     ]
@@ -124,13 +124,26 @@ class CalculationEngineService:
         ids_cols = layout.get("Ids", self._IDS_COLUMNS)
         hist_cols = layout.get("Historico", self._HIST_COLUMNS)
         data_cols = layout.get("Data", self._DATA_COLUMNS)
+        # Normalize legacy headers coming from layout templates.
+        if data_cols:
+            data_cols = [
+                "Absorcion" if c == "Absorción L12M" else "Absorcion_H" if c == "Absorción Hist." else c
+                for c in data_cols
+            ]
+            if "Segmento" not in data_cols:
+                if "Superficie" in data_cols:
+                    idx = data_cols.index("Superficie") + 1
+                    data_cols.insert(idx, "Segmento")
+                else:
+                    data_cols.append("Segmento")
         tip_cols = layout.get("Tipologias", self._TIPOLOGIAS_COLUMNS)
 
         filter_df = self._load_filter(filter_path)
         if filter_df is None or filter_df.empty:
             filter_df = self._default_filter(raw_clean)
         ids = self._build_ids(raw_clean, ids_cols, filter_df)
-        historico = self._build_historico(raw_clean, hist_cols, start_quarter, display_start_quarter, filter_df)
+        # Historico must always reflect the full market (no project filter).
+        historico = self._build_historico(raw_clean, hist_cols, start_quarter, display_start_quarter, None)
         data = self._build_data(raw_clean, ids, data_cols, filter_df)
         tipologias_raw = self._load_tipologias(filter_path)
         tipologias = self._build_tipologias(raw_clean, ids, tipologias_raw, tip_cols, filter_df)
@@ -203,7 +216,12 @@ class CalculationEngineService:
             axis=1,
         )
 
-        latest.loc[latest["Absorcion"] == 0, "Meses_Inventario"] = "N/A"
+        latest["Meses_Inventario"] = latest.apply(
+            lambda row: row["Inventario"] / row["Absorcion"]
+            if pd.notna(row.get("Inventario")) and row.get("Absorcion") not in (0, None)
+            else (0 if row.get("Absorcion") == 0 else None),
+            axis=1,
+        )
 
         output = pd.DataFrame()
         for col in columns:
@@ -530,33 +548,33 @@ class CalculationEngineService:
             latest,
             ["Cajones_tip", "Cajones", "Cajones Estacionamiento", "Estacionamientos", "Cajones Estacionamiento_tip"],
         )
-        latest["Ticket"] = self._pick_col(latest, ["Precio Promedio Inv.", "Precio Promedio Inv._tip"])
-        latest["$xm2"] = self._pick_col(latest, ["$M2 Promedio Inv", "$M2 Promedio Inv_tip", "M2 Promedio Inv_tip"])
-        latest["Superficie"] = self._pick_col(latest, ["M2 Promedio Inv", "Metrajes (M2)_tip"])
-        latest["Stock Inicial"] = pd.to_numeric(
-            self._pick_col(latest, ["Unidades Totales_tip", "Unidades Totales"]),
-            errors="coerce",
-        )
+        latest["Ticket"] = self._pick_col(latest, ["Precio Promedio Inv._tip", "Precio Promedio Inv."])
+        latest["$xm2"] = self._pick_col(latest, ["M2 Promedio Inv_tip", "$M2 Promedio Inv_tip", "$M2 Promedio Inv"])
+        latest["Superficie"] = self._pick_col(latest, ["Metrajes (M2)_tip", "M2 Promedio Inv"])
+        # Use Data stock to match Stock_Inicial from Data.
+        latest["Stock_Inicial"] = pd.to_numeric(latest.get("Unidades Totales"), errors="coerce")
         latest["Inventario"] = pd.to_numeric(
             self._pick_col(latest, ["Unidades Inventario_tip", "Unidades Inventario"]),
             errors="coerce",
         )
-        latest["Meses en Mercado"] = pd.to_numeric(
+        latest["Meses_Mercado"] = pd.to_numeric(
             self._pick_col(latest, ["Meses en el Mercado_tip", "Meses en el Mercado"]),
             errors="coerce",
         )
 
-        latest["Ventas"] = latest["Stock Inicial"] - latest["Inventario"]
+        latest["Ventas"] = latest["Stock_Inicial"] - latest["Inventario"]
+        latest["Meses_Ultimo_Ano"] = latest["Meses_Mercado"].apply(
+            lambda value: min(value, 12) if pd.notna(value) and value > 0 else None
+        )
         latest["Absorcion"] = latest.apply(
-            lambda row: row["Ventas"] / row["Meses en Mercado"]
-            if pd.notna(row.get("Ventas")) and row.get("Meses en Mercado") not in (0, None)
+            lambda row: row["Ventas"] / row["Meses_Mercado"]
+            if pd.notna(row.get("Ventas")) and row.get("Meses_Mercado") not in (0, None)
             else None,
             axis=1,
         )
-        latest["Tipo de Modelo"] = latest.apply(
-            lambda row: self._normalize_tipologia(row.get("Tipo de Modelo"), row.get("Dormitorios")),
-            axis=1,
-        )
+        for col in ["Ticket", "$xm2", "Superficie", "Bathroom", "Cajones"]:
+            if col in latest.columns:
+                latest[col] = pd.to_numeric(latest[col], errors="coerce")
 
         output = pd.DataFrame()
         for col in columns:
@@ -568,6 +586,8 @@ class CalculationEngineService:
         output = ensure_columns(output, columns)
         if "Absorcion" in output.columns:
             output["Absorcion"] = pd.to_numeric(output["Absorcion"], errors="coerce").round(2)
+        if "Superficie" in output.columns:
+            output["Superficie"] = pd.to_numeric(output["Superficie"], errors="coerce").round(0)
         return output
 
     def _ventas_trimestre(self, hist: pd.DataFrame) -> pd.DataFrame:
@@ -603,10 +623,10 @@ class CalculationEngineService:
         tip["_key"] = tip["Proyecto"].map(normalize_key)
         latest = latest.merge(tip, on="_key", how="inner")
 
-        latest["Stock Inicial"] = latest.get("Unidades Totales")
+        latest["Stock_Inicial"] = latest.get("Unidades Totales")
         latest["Inventario"] = latest.get("Unidades Inventario")
-        latest["Ventas"] = latest["Stock Inicial"] - latest["Inventario"]
-        latest["Meses en Mercado"] = latest.get("Meses en el Mercado")
+        latest["Ventas"] = latest["Stock_Inicial"] - latest["Inventario"]
+        latest["Meses_Mercado"] = latest.get("Meses en el Mercado")
         latest["Tipo de Modelo"] = latest.apply(
             lambda row: self._normalize_tipologia(row.get("Tipo de Modelo"), row.get("Dormitorios")),
             axis=1,
@@ -615,29 +635,29 @@ class CalculationEngineService:
         grouped = []
         for tipo, group in latest.groupby("Tipo de Modelo"):
             inventario = pd.to_numeric(group.get("Inventario"), errors="coerce").sum()
-            stock = pd.to_numeric(group.get("Stock Inicial"), errors="coerce").sum()
+            stock = pd.to_numeric(group.get("Stock_Inicial"), errors="coerce").sum()
             ventas = pd.to_numeric(group.get("Ventas"), errors="coerce").sum()
             ticket_m = weighted_avg(group, "Precio Promedio Inv.", "Unidades Inventario") / 1_000_000
             superficie = weighted_avg(group, "M2 Promedio Inv", "Unidades Inventario")
             xm2_k = (ticket_m / superficie) * 1000 if superficie else 0
-            meses_mercado = pd.to_numeric(group.get("Meses en Mercado"), errors="coerce").mean()
+            meses_mercado = pd.to_numeric(group.get("Meses_Mercado"), errors="coerce").mean()
             absorcion = ventas / meses_mercado if meses_mercado and pd.notna(ventas) else None
             moi = None
             if absorcion and absorcion != 0:
                 moi = inventario / absorcion
             elif absorcion == 0:
-                moi = "N/A"
+                moi = 0
             grouped.append(
                 {
                     "Tipo": tipo,
-                    "Stock Inicial": stock,
+                    "Stock_Inicial": stock,
                     "Inventario": inventario,
                     "Ventas": ventas,
                     "Ticket (M)": ticket_m,
                     "$xm2 (k)": xm2_k,
                     "Superficie": superficie,
                     "Absorción": absorcion,
-                    "Meses en Mercado": meses_mercado,
+                    "Meses_Mercado": meses_mercado,
                     "Meses de Inv.": moi,
                 }
             )
@@ -645,14 +665,14 @@ class CalculationEngineService:
         if not grouped:
             return pd.DataFrame()
         wide_order = [
-            "Stock Inicial",
+            "Stock_Inicial",
             "Inventario",
             "Ventas",
             "Ticket (M)",
             "$xm2 (k)",
             "Superficie",
             "Absorción",
-            "Meses en Mercado",
+            "Meses_Mercado",
             "Meses de Inv.",
         ]
         typ_order = ["1R", "1.5R", "2R", "2.5R", "3R", "3.5R+", "4R", "5R"]
@@ -675,6 +695,10 @@ class CalculationEngineService:
         if text:
             t = text.lower().replace("recamaras", "").replace("recámara", "").replace("recamara", "").strip()
             t = t.replace(" ", "")
+            if "2+1" in t or "2+1e" in t:
+                return "2.5R"
+            if "3+1" in t or "3+1e" in t:
+                return "3.5R+"
             if "1+1" in t or "1+1e" in t:
                 return "1.5R"
             if "1.5" in t:
@@ -750,10 +774,6 @@ class CalculationEngineService:
             "M2 Promedio Inv",
         ]
         hist = hist[[c for c in required if c in hist.columns]].dropna(subset=["Proyecto", "Último Trimestre"])
-        if filter_df is not None:
-            hist["_key"] = hist["Proyecto"].map(normalize_key)
-            hist = self._apply_filter(hist, filter_df, use_key=True)
-
         for col in ["Unidades Totales", "Unidades Inventario", "Precio Promedio Inv.", "M2 Promedio Inv"]:
             if col in hist.columns:
                 hist[col] = pd.to_numeric(hist[col], errors="coerce")
@@ -792,7 +812,7 @@ class CalculationEngineService:
             if absorcion and absorcion != 0:
                 meses_inv = inventario / absorcion
             elif absorcion == 0:
-                meses_inv = "N/A"
+                meses_inv = 0
 
             rows.append(
                 {
@@ -828,13 +848,19 @@ class CalculationEngineService:
         tmp["_key"] = tmp["Proyecto"].map(normalize_key)
         tmp["_quarter_key"] = tmp["Último Trimestre"].map(quarter_key)
         tmp = tmp.sort_values(["_key", "_quarter_key"])
-        global_min_q = tmp["_quarter_key"].min()
         tmp["sold"] = tmp["Unidades Totales"] - tmp["Unidades Inventario"]
         diff = tmp.groupby("_key")["sold"].diff()
         tmp["ventas_trimestre"] = diff
-        mask_first = diff.isna() & (tmp["_quarter_key"] == global_min_q)
-        tmp.loc[mask_first, "ventas_trimestre"] = None
-        tmp.loc[diff.isna() & ~mask_first, "ventas_trimestre"] = tmp.loc[diff.isna() & ~mask_first, "sold"]
+        mask_first = diff.isna()
+        meses_mercado = None
+        if "Meses en el Mercado" in tmp.columns:
+            meses_mercado = pd.to_numeric(tmp["Meses en el Mercado"], errors="coerce")
+        if meses_mercado is not None:
+            mask_young = meses_mercado <= 12
+            tmp.loc[mask_first & mask_young, "ventas_trimestre"] = tmp.loc[mask_first & mask_young, "sold"]
+            tmp.loc[mask_first & ~mask_young, "ventas_trimestre"] = None
+        else:
+            tmp.loc[mask_first, "ventas_trimestre"] = tmp.loc[mask_first, "sold"]
         ventas_hist = tmp.groupby("_key", as_index=False)["ventas_trimestre"].sum(min_count=1)
         return ventas_hist.rename(columns={"ventas_trimestre": "Ventas_H"})
 
@@ -843,33 +869,34 @@ class CalculationEngineService:
         tmp = tmp.dropna(subset=["Proyecto", "Último Trimestre"])
         tmp["_key"] = tmp["Proyecto"].map(normalize_key)
         tmp["_quarter_key"] = tmp["Último Trimestre"].map(quarter_key)
-        tmp["Unidades Inventario"] = pd.to_numeric(tmp["Unidades Inventario"], errors="coerce")
         tmp = tmp.sort_values(["_key", "_quarter_key"])
 
-        quarters = sorted(tmp["_quarter_key"].dropna().unique())
-        if len(quarters) < 2:
-            return pd.DataFrame(columns=["_key", "Ventas_Ultimo_Ano"])
-
-        # Use last 5 quarters (4 trimestre sales) when possible.
-        last_quarters = quarters[-5:] if len(quarters) >= 5 else quarters
-        inv = (
-            tmp[tmp["_quarter_key"].isin(last_quarters)]
-            .groupby(["_key", "_quarter_key"], as_index=False)["Unidades Inventario"]
-            .first()
-        )
-        pivot = inv.pivot(index="_key", columns="_quarter_key", values="Unidades Inventario")
-        ordered = [q for q in last_quarters if q in pivot.columns]
+        # Compute ventas_trimestre from stock changes (sold), then sum last 4 quarters per project.
+        tmp["Unidades Totales"] = pd.to_numeric(tmp["Unidades Totales"], errors="coerce")
+        tmp["Unidades Inventario"] = pd.to_numeric(tmp["Unidades Inventario"], errors="coerce")
+        tmp["sold"] = tmp["Unidades Totales"] - tmp["Unidades Inventario"]
+        diff = tmp.groupby("_key")["sold"].diff()
+        tmp["ventas_trimestre"] = diff
+        mask_first = diff.isna()
+        meses_mercado = None
+        if "Meses en el Mercado" in tmp.columns:
+            meses_mercado = pd.to_numeric(tmp["Meses en el Mercado"], errors="coerce")
+        if meses_mercado is not None:
+            mask_young = meses_mercado <= 12
+            tmp.loc[mask_first & mask_young, "ventas_trimestre"] = tmp.loc[mask_first & mask_young, "sold"]
+            tmp.loc[mask_first & ~mask_young, "ventas_trimestre"] = None
+        else:
+            tmp.loc[mask_first, "ventas_trimestre"] = tmp.loc[mask_first, "sold"]
+        tmp["ventas_trimestre"] = tmp["ventas_trimestre"].where(tmp["ventas_trimestre"] > 0, 0)
 
         ventas = {}
-        for key, row in pivot.iterrows():
-            total = 0.0
-            for idx in range(len(ordered) - 1):
-                current = row.get(ordered[idx])
-                nxt = row.get(ordered[idx + 1])
-                if pd.notna(current) and pd.notna(nxt):
-                    diff = current - nxt
-                    if diff > 0:
-                        total += diff
+        for key, group in tmp.groupby("_key"):
+            g = group.dropna(subset=["_quarter_key"]).sort_values("_quarter_key")
+            if g.empty:
+                continue
+            last_quarters = g["_quarter_key"].unique()
+            last_quarters = last_quarters[-4:] if len(last_quarters) >= 4 else last_quarters
+            total = g.loc[g["_quarter_key"].isin(last_quarters), "ventas_trimestre"].sum(min_count=1)
             ventas[key] = total
 
         return pd.DataFrame({"_key": list(ventas.keys()), "Ventas_Ultimo_Ano": list(ventas.values())})
@@ -888,7 +915,11 @@ class CalculationEngineService:
         if series is None:
             return None
         parsed = pd.to_datetime(series, errors="coerce")
-        return parsed.dt.strftime("%Y-%m-%d 00:00:00")
+        formatted = parsed.dt.strftime("%m/%d/%Y")
+        # Remove leading zeros to match 1/1/2025 style.
+        formatted = formatted.str.replace(r"^0", "", regex=True)
+        formatted = formatted.str.replace(r"/0", "/", regex=True)
+        return formatted
 
     def _pick_col(self, df: pd.DataFrame, candidates: list[str]) -> pd.Series | None:
         for name in candidates:
@@ -899,8 +930,17 @@ class CalculationEngineService:
     def _normalize_dormitorios(self, series: pd.Series | None) -> pd.Series | None:
         if series is None:
             return None
-        vals = series.astype(str).str.strip()
-        nums = vals.str.extract(r"(\d+)")[0]
+        vals = series.astype(str).str.strip().str.lower()
+        # Normalize explicit +1E patterns first.
+        mapped = vals.str.replace(" ", "").str.replace(",", ".")
+        mapped = mapped.where(~mapped.str.contains(r"2\+1e", regex=True), "2.5")
+        mapped = mapped.where(~mapped.str.contains(r"3\+1e", regex=True), "3.5")
+        mapped = mapped.where(~mapped.str.contains(r"1\+1e", regex=True), "1.5")
+        # Handle "+1" without E.
+        mapped = mapped.where(~mapped.str.contains(r"2\+1", regex=True), "2.5")
+        mapped = mapped.where(~mapped.str.contains(r"3\+1", regex=True), "3.5")
+        mapped = mapped.where(~mapped.str.contains(r"1\+1", regex=True), "1.5")
+        nums = mapped.str.extract(r"(\d+(?:\.\d+)?)")[0]
         return pd.to_numeric(nums, errors="coerce")
 
     def _apply_rounding_data(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -908,9 +948,11 @@ class CalculationEngineService:
         for col in ["Stock_Inicial", "Ventas", "Inventario", "Meses_Mercado"]:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors="coerce").round(0)
-        for col in ["Absorcion", "Absorcion_H", "Meses_Inventario", "Ticket", "$xm2", "Superficie"]:
+        for col in ["Absorcion", "Absorcion_H", "Meses_Inventario", "Ticket", "$xm2"]:
             if col in df.columns:
                 df[col] = df[col].apply(round_or_keep)
+        if "Superficie" in df.columns:
+            df["Superficie"] = pd.to_numeric(df["Superficie"], errors="coerce").round(0)
         for col in ["Latitud", "Longitud"]:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors="coerce").round(4)

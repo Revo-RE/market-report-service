@@ -197,7 +197,6 @@ class GoogleDriveUploader:
             )
 
             file_id = file.get("id")
-
             if convert_to_sheets:
                 # Convert uploaded XLSX to Google Sheets via copy
                 converted = (
@@ -220,6 +219,22 @@ class GoogleDriveUploader:
                     drive_service.files().delete(fileId=file_id, supportsAllDrives=True).execute()
                 except Exception as e:
                     self._logger.warning("Could not delete original XLSX after conversion: %s", e)
+                # Best-effort cleanup: remove any remaining XLSX with the same name.
+                try:
+                    existing_files = (
+                        drive_service.files()
+                        .list(
+                            q=f"name='{filename}' and '{folder_id}' in parents and trashed=false",
+                            fields="files(id, name)",
+                            supportsAllDrives=True,
+                            includeItemsFromAllDrives=True,
+                        )
+                        .execute()
+                    )
+                    for existing_file in existing_files.get("files", []):
+                        drive_service.files().delete(fileId=existing_file["id"], supportsAllDrives=True).execute()
+                except Exception as e:
+                    self._logger.warning("Could not cleanup XLSX files after conversion: %s", e)
                 self._logger.info("File uploaded and converted to Sheets. File ID: %s", converted_id)
                 return converted_id
 

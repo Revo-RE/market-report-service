@@ -43,6 +43,9 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+CITY = "Ciudad de Mexico"
+
+
 def _extract_folder_id(url: str) -> str:
     if "/folders/" in url:
         parts = url.split("/folders/")
@@ -142,9 +145,8 @@ def main() -> int:
 
     prefix = args.prefix
     candidates = [f for f in folders if f.get("name", "").startswith(prefix)]
-    if args.only:
-        wanted = set(args.only)
-        candidates = [f for f in candidates if f["name"].replace(prefix, "") in wanted]
+    # Force a single city run (manual selection).
+    candidates = [f for f in candidates if f["name"].replace(prefix, "") == CITY]
 
     if not candidates:
         print("No city folders found.")
@@ -159,6 +161,7 @@ def main() -> int:
         print(f"\n=== Running pipeline for {city} ===")
         env = os.environ.copy()
         env["PYTHONPATH"] = f"{Path.cwd() / 'src'}"
+        env["SKIP_LOCAL_OUTPUTS"] = "1"
         cmd = [
             sys.executable,
             "run.py",

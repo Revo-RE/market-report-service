@@ -8,6 +8,8 @@ from typing import Dict, Optional
 import tempfile
 
 import json
+import hashlib
+import os
 import pandas as pd
 
 from market_report.adapters.chart_renderers.matplotlib import MatplotlibChartRenderer
@@ -17,6 +19,8 @@ from market_report.adapters.data_sources.local_excel_folder import LocalExcelFol
 from market_report.adapters.excel_writer import ExcelWriter
 from market_report.adapters.narrative_engines.rules_based import RulesBasedNarrativeEngine
 from market_report.adapters.storage.google_drive_upload import GoogleDriveUploader
+from market_report.adapters.storage.google_sheets_update import GoogleSheetsUpdater
+from market_report.adapters.storage.google_drive_audit import GoogleDriveAuditStore
 from market_report.adapters.storage.local_fs import LocalFileSystemStorage
 from market_report.application.services.charts import ChartsService
 from market_report.application.services.metrics import MetricsService
@@ -83,6 +87,7 @@ class MarketReportPipeline:
         else:
             run_dir = self._storage.prepare_run_dir(run_id)
         charts_dir = run_dir / "charts"
+        skip_local = bool(os.getenv("SKIP_LOCAL_OUTPUTS"))
 
         # Minimal 3-sheet consolidated output (layout-driven)
         minimal_cfg = {}
@@ -93,6 +98,7 @@ class MarketReportPipeline:
         if minimal_cfg.get("minimal_output"):
             source_path = minimal_cfg.get("minimal_source_path")
             layout_path = minimal_cfg.get("minimal_layout_path")
+            layout_override = minimal_cfg.get("minimal_layout")
             start_quarter = minimal_cfg.get("minimal_start_quarter")
             display_start = minimal_cfg.get("minimal_display_start_quarter")
             filter_path = minimal_cfg.get("minimal_filter_path")
@@ -114,14 +120,90 @@ class MarketReportPipeline:
             result = orchestrator.execute(
                 raw_tables={"raw": raw_clean},
                 layout_path=layout_path,
+                layout_override=layout_override,
                 start_quarter=start_quarter,
                 display_start_quarter=display_start,
                 filter_path=filter_path,
             )
             minimal_tabs = result.sheets
 
+            def _hash_df(df: pd.DataFrame) -> str:
+                if df.empty:
+                    return ""
+                safe = df.copy()
+                safe = safe.where(pd.notna(safe), "")
+                data = safe.to_csv(index=False).encode("utf-8")
+                return hashlib.sha256(data).hexdigest()
+
+            def _audit_payload() -> Dict[str, object]:
+                return {
+                    "city": config.project_name,
+                    "run_id": run_id,
+                    "timestamp_utc": datetime.utcnow().isoformat() + "Z",
+                    "source_folder": getattr(config.google_drive_folder, "folder_url", None),
+                    "rows": {k: int(v.shape[0]) for k, v in minimal_tabs.items()},
+                    "cols": {k: int(v.shape[1]) for k, v in minimal_tabs.items()},
+                    "hash": {k: _hash_df(v) for k, v in minimal_tabs.items()},
+                }
+
+            def _diff_summary(prev: Dict[str, object], curr: Dict[str, object]) -> Dict[str, object]:
+                summary: Dict[str, object] = {"changed": False, "by_sheet": {}}
+                prev_hash = prev.get("hash", {}) if prev else {}
+                prev_rows = prev.get("rows", {}) if prev else {}
+                prev_cols = prev.get("cols", {}) if prev else {}
+                for sheet_name in minimal_tabs.keys():
+                    curr_hash = curr.get("hash", {}).get(sheet_name)
+                    summary["by_sheet"][sheet_name] = {
+                        "hash_changed": curr_hash != prev_hash.get(sheet_name),
+                        "rows_prev": prev_rows.get(sheet_name),
+                        "rows_curr": curr.get("rows", {}).get(sheet_name),
+                        "cols_prev": prev_cols.get(sheet_name),
+                        "cols_curr": curr.get("cols", {}).get(sheet_name),
+                    }
+                summary["changed"] = any(v["hash_changed"] for v in summary["by_sheet"].values())
+                return summary
+
+            if config.output and config.output.drive_folder_url:
+                try:
+                    sheet_name = f"{config.project_name}_Consolidado"
+                    self._logger.info("Updating charts sheet %s", sheet_name)
+                    updater = GoogleSheetsUpdater.from_drive_folder(
+                        config.output.drive_folder_url,
+                        sheet_name,
+                    )
+                    updater.update_tabs(
+                        {
+                            "Ids": minimal_tabs.get("Ids", pd.DataFrame()),
+                            "Historico": minimal_tabs.get("Historico", pd.DataFrame()),
+                            "Data": minimal_tabs.get("Data", pd.DataFrame()),
+                            "Tipologias": minimal_tabs.get("Tipologias", pd.DataFrame()),
+                        }
+                    )
+                except Exception as exc:
+                    self._logger.warning("Charts sheet update skipped: %s", exc)
+
+            audit_folder = minimal_cfg.get("audit_drive_folder_url")
+            if audit_folder:
+                try:
+                    audit_store = GoogleDriveAuditStore(audit_folder)
+                    current_audit = _audit_payload()
+                    latest_name = f"{config.project_name}_audit_latest.json"
+                    prev_audit = audit_store.download_json(latest_name)
+                    diff = _diff_summary(prev_audit or {}, current_audit)
+                    audit_store.upload_json(latest_name, current_audit)
+                    audit_store.upload_json(
+                        f"{config.project_name}_audit_{run_id}.json",
+                        current_audit,
+                    )
+                    audit_store.upload_json(
+                        f"{config.project_name}_audit_diff_{run_id}.json",
+                        diff,
+                    )
+                except Exception as exc:
+                    self._logger.warning("Audit logging skipped: %s", exc)
+
             consolidated_path = None
-            if config.output:
+            if config.output and not skip_local:
                 output_filename = config.output.filename or "consolidado.xlsx"
                 consolidated_path = run_dir / output_filename
                 self._excel_writer.write_workbook(
@@ -131,7 +213,10 @@ class MarketReportPipeline:
                 )
 
                 target_drive_folder = config.output.drive_folder_url
-                if target_drive_folder:
+                skip_upload = bool(os.getenv("SKIP_DRIVE_UPLOAD")) or getattr(config.output, "skip_drive_upload", False)
+                if skip_local:
+                    skip_upload = True
+                if target_drive_folder and not skip_upload:
                     self._logger.info("Uploading to Google Drive: %s", target_drive_folder)
                     uploader = GoogleDriveUploader()
                     try:
@@ -158,6 +243,11 @@ class MarketReportPipeline:
                                 self._logger.warning("Failed to remove local output directory %s: %s", run_dir, exc)
                     except Exception as e:
                         self._logger.error("Failed to upload to Google Drive: %s", e)
+            if skip_local:
+                try:
+                    shutil.rmtree(run_dir, ignore_errors=True)
+                except Exception:
+                    pass
 
             return PipelineResult(
                 run_id=run_id,

@@ -32,20 +32,27 @@ class ConsolidationOrchestrator:
         self,
         raw_tables: Dict[str, pd.DataFrame],
         layout_path: str | None,
+        layout_override: Dict[str, list[str]] | None,
         start_quarter: str | None,
         display_start_quarter: str | None,
         filter_path: str | None = None,
     ) -> ConsolidationResult:
         raw_clean = self.ingestion.load_quarterly_data(raw_tables)
 
-        layout = None
+        layout = layout_override
         if layout_path:
             try:
                 xl = pd.ExcelFile(layout_path)
                 layout = {}
                 for sheet in ["Ids", "Historico", "Data"]:
                     if sheet in xl.sheet_names:
-                        layout[sheet] = list(xl.parse(sheet).columns)
+                        cols = list(xl.parse(sheet).columns)
+                        if sheet == "Data":
+                            cols = [
+                                "Absorcion" if c == "Absorción L12M" else "Absorcion_H" if c == "Absorción Hist." else c
+                                for c in cols
+                            ]
+                        layout[sheet] = cols
             except Exception:
                 layout = None
 
