@@ -13,7 +13,9 @@ from googleapiclient.discovery import build
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run pipeline for all city folders in Drive.")
+    parser = argparse.ArgumentParser(
+        description="Run pipeline for all city folders in Drive."
+    )
     parser.add_argument(
         "--config",
         default="configs/projects/consolidado_drive.json",
@@ -42,10 +44,6 @@ def parse_args() -> argparse.Namespace:
     )
     return parser.parse_args()
 
-
-CITY = "Ciudad de Mexico"
-
-
 def _extract_folder_id(url: str) -> str:
     if "/folders/" in url:
         parts = url.split("/folders/")
@@ -57,7 +55,9 @@ def _extract_folder_id(url: str) -> str:
 def _get_drive_service() -> object:
     cred_path = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE") or "credentials.json"
     if not Path(cred_path).exists():
-        raise FileNotFoundError("Missing Google credentials.json or GOOGLE_SERVICE_ACCOUNT_FILE.")
+        raise FileNotFoundError(
+            "Missing Google credentials.json or GOOGLE_SERVICE_ACCOUNT_FILE."
+        )
     creds = Credentials.from_service_account_file(
         cred_path,
         scopes=[
@@ -76,15 +76,15 @@ def _list_subfolders(drive_service, parent_folder_id: str) -> list[dict[str, str
     )
     results = (
         drive_service.files()
-            .list(
-                q=query,
-                fields="files(id, name, mimeType, shortcutDetails)",
-                pageSize=1000,
-                supportsAllDrives=True,
-                includeItemsFromAllDrives=True,
-                corpora="allDrives",
-            )
-            .execute()
+        .list(
+            q=query,
+            fields="files(id, name, mimeType, shortcutDetails)",
+            pageSize=1000,
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
+            corpora="allDrives",
+        )
+        .execute()
     )
     folders = []
     for item in results.get("files", []):
@@ -95,6 +95,7 @@ def _list_subfolders(drive_service, parent_folder_id: str) -> list[dict[str, str
         else:
             folders.append(item)
     return folders
+
 
 def _list_data_files(drive_service, folder_id: str) -> list[dict[str, str]]:
     query = f"'{folder_id}' in parents and trashed=false"
@@ -141,12 +142,19 @@ def main() -> int:
             parent_folder_id = matches[0]["id"]
             folders = _list_subfolders(drive_service, parent_folder_id)
         else:
-            print(f"⚠️  Root subfolder '{args.root_subfolder}' not found. Using root folder.")
+            print(
+                f"⚠️  Root subfolder '{args.root_subfolder}' not found. Using root folder."
+            )
 
     prefix = args.prefix
     candidates = [f for f in folders if f.get("name", "").startswith(prefix)]
-    # Force a single city run (manual selection).
-    candidates = [f for f in candidates if f["name"].replace(prefix, "") == CITY]
+
+    # CORRECTO — respeta --only cuando viene de Make o workflow_dispatch
+    if args.only:
+        only_normalized = [c.replace("_", " ") for c in args.only]
+        candidates = [
+            f for f in candidates if f["name"].replace(prefix, "") in only_normalized
+        ]
 
     if not candidates:
         print("No city folders found.")
