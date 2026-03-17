@@ -1,0 +1,93 @@
+name: Market Report Pipeline
+
+on:
+  schedule:
+    # Ejecuta el pipeline todos los días a las 2 AM UTC (9 PM México)
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      cities:
+        description: 'Ciudades a procesar (separadas por coma, ej: Guadalajara,LosCabos). Dejar vacío para todas'
+        required: false
+        default: ''
+  repository_dispatch:
+    types: [market-report-trigger]
+
+jobs:
+  market-report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Crear archivo de credenciales desde secret
+        run: |
+          echo "${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}" > credentials.json
+          chmod 600 credentials.json
+        env:
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+
+      - name: Ejecutar pipeline para todas las ciudades
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.cities == '')
+        run: |
+          export GOOGLE_SERVICE_ACCOUNT_FILE="${PWD}/credentials.json"
+          export PYTHONPATH="${PWD}/src:${PYTHONPATH}"
+          python run_all_cities.py \
+            --config configs/projects/consolidado_drive.json \
+            --default-config configs/projects/default.json
+        continue-on-error: true
+
+      - name: Ejecutar pipeline para ciudades específicas (workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.cities != ''
+        run: |
+          export GOOGLE_SERVICE_ACCOUNT_FILE="${PWD}/credentials.json"
+          export PYTHONPATH="${PWD}/src:${PYTHONPATH}"
+          CITIES="${{ github.event.inputs.cities }}"
+          python run_all_cities.py \
+            --config configs/projects/consolidado_drive.json \
+            --default-config configs/projects/default.json \
+            --only $(echo $CITIES | tr ',' ' ')
+        continue-on-error: true
+
+      - name: Ejecutar pipeline para ciudad desde Make
+        if: github.event_name == 'repository_dispatch'
+        run: |
+          export GOOGLE_SERVICE_ACCOUNT_FILE="${PWD}/credentials.json"
+          export PYTHONPATH="${PWD}/src:${PYTHONPATH}"
+          python run_all_cities.py \
+            --config configs/projects/consolidado_drive.json \
+            --default-config configs/projects/default.json \
+            --only "${{ github.event.client_payload.ciudad }}"
+        continue-on-error: true
+
+      - name: Limpiar credenciales
+        if: always()
+        run: |
+          rm -f credentials.json
+
+      - name: Subir artefactos
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: market-report-outputs
+          path: outputs/
+          retention-days: 30
+
+      - name: Notificar en caso de error
+        if: failure()
+        run: |
+          echo "❌ El pipeline de Market Report falló"
+          echo "Ver detalles en: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

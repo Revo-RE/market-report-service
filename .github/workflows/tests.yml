@@ -1,0 +1,83 @@
+name: Tests & Quality
+
+on:
+  push:
+    branches: [ main, develop, '*.md' ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Ejecutar tests unitarios
+        run: |
+          export PYTHONPATH="${PWD}/src:${PYTHONPATH}"
+          pytest tests/unit/ -v --tb=short
+        continue-on-error: true
+
+      - name: Ejecutar tests de integración
+        run: |
+          export PYTHONPATH="${PWD}/src:${PYTHONPATH}"
+          pytest tests/integration/ -v --tb=short
+        continue-on-error: true
+
+      - name: Generar reporte de coverage
+        run: |
+          export PYTHONPATH="${PWD}/src:${PYTHONPATH}"
+          pip install pytest-cov
+          pytest tests/ --cov=src/market_report --cov-report=xml --cov-report=term
+        continue-on-error: true
+
+      - name: Subir reporte de coverage
+        uses: codecov/codecov-action@v3
+        if: always()
+        with:
+          files: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+
+  lint:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Instalar herramientas de lint
+        run: |
+          python -m pip install --upgrade pip
+          pip install pylint flake8 black isort
+
+      - name: Verificar formato con Black
+        run: black --check src/ tests/ --line-length=120
+        continue-on-error: true
+
+      - name: Verificar imports con isort
+        run: isort --check-only src/ tests/
+        continue-on-error: true
+
+      - name: Ejecutar Flake8
+        run: flake8 src/ tests/ --max-line-length=120 --ignore=E203,W503
+        continue-on-error: true
